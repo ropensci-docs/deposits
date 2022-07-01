@@ -1,0 +1,12 @@
+pandoc: 2.16.2
+pkgdown: 2.0.3
+pkgdown_sha: ~
+articles:
+  deposits: deposits.html
+  entities: entities.html
+  install-setup: install-setup.html
+last_built: 2022-07-01T12:15Z
+urls:
+  reference: https://docs.ropensci.org/deposits/reference
+  article: https://docs.ropensci.org/deposits/articles
+

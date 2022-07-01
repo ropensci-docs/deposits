@@ -1,0 +1,12 @@
+{
+  "commit": {
+    "commit": "04b8e22ebbbecb11a4794e8cb20599e65dd54c98",
+    "author": "mpadge <mark.padgham@email.com>",
+    "time": "2022-07-01 11:48:00",
+    "files": 3,
+    "merge": false,
+    "message": "typo\n"
+  },
+  "repo": "https://github.com/ropenscilabs/deposits",
+  "pkg": "deposits"
+}
