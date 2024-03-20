@@ -1,0 +1,16 @@
+pandoc: 2.16.2
+pkgdown: 2.0.7
+pkgdown_sha: ~
+articles:
+  deposits-R6: deposits-R6.html
+  deposits: deposits.html
+  frictionless: frictionless.html
+  install-setup: install-setup.html
+  metadata: metadata.html
+  versioning: versioning.html
+  workflow: workflow.html
+last_built: 2024-03-20T07:40Z
+urls:
+  reference: https://docs.ropensci.org/deposits/reference
+  article: https://docs.ropensci.org/deposits/articles
+

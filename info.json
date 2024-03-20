@@ -1,0 +1,12 @@
+{
+  "commit": {
+    "commit": "aaaf7f7ed3a3f6a587792032bf5ba245b5e3631b",
+    "author": "mpadge <mark.padgham@email.com>",
+    "time": "2024-02-19 12:23:02",
+    "files": 34,
+    "merge": false,
+    "message": "update zenodo mock test results for #91\n"
+  },
+  "repo": "https://github.com/ropenscilabs/deposits",
+  "pkg": "deposits"
+}
