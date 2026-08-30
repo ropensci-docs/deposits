@@ -1,0 +1,13 @@
+{
+  "commit": {
+    "commit": "b382f06753124b075c8c462a9ec4a3083a830c50",
+    "author": "mark padgham <mark.padgham@email.com>",
+    "time": "2026-06-08T07:39:16Z",
+    "files": 2,
+    "merge": true,
+    "message": "Merge pull request #120 from LeonidasZhak/fix/typo-deposits-emthods\n\nFix typo: deposits_emthods -> deposits_methods"
+  },
+  "repo": "https://github.com/ropenscilabs/deposits",
+  "pkg": "deposits",
+  "time": "2026-08-30T07:20:41Z"
+}

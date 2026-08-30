@@ -1,0 +1,580 @@
+# deposits metadata
+
+This vignette demonstrates procedures for specifying and validate
+metadata for the deposits package. This vignette will use metadata for
+the two “beaver” datasets provided with R’s [“datasets”
+package](https://stat.ethz.ch/R-manual/R-devel/library/datasets/html/beavers.html).
+Relevant metadata for these datasets are given in the “Source” listed on
+that page (or [`?beaver1`](https://rdrr.io/r/datasets/beavers.html) to
+see a local version):
+
+> P. S. Reynolds (1994) *Time-series analyses of beaver body
+> temperatures.* Chapter 11 of Lange, N., Ryan, L., Billard, L.,
+> Brillinger, D., Conquest, L. and Greenhouse, J. eds (1994) Case
+> Studies in Biometry. New York: John Wiley and Sons.
+
+## Dublin Core Metadata
+
+The metadata structure used by deposits follows the specifications of
+the [Dublin Core Metadata
+Initiative](https://www.dublincore.org/specifications/dublin-core/dcmi-terms/).
+Users do not need to understand or read any documents on the DCMI
+structure, as the implementation is explicitly contained within [the
+package’s “dc/schema.json”
+file](https://github.com/ropenscilabs/deposits/blob/main/inst/extdata/dc/schema.json).
+That file should be the only document needed to understand metadata
+compliance for deposits. It may nevertheless be instructive to examine
+the DCMI specifications, in order to understand individual terms in a
+broader context.
+
+## Metadata Validation
+
+Metadata in deposits are validated against [JSON
+schemas](https://json-schema.org), with the schema for the main
+“metadata” field contained in [the package’s “dc/schema.json”
+file](https://github.com/ropenscilabs/deposits/blob/main/inst/extdata/dc/schema.json).
+This schema file includes detailed specifications for every metadata
+term used in deposits. The list of terms can also be viewed directly
+with [the `dcmi_terms()`
+function](https://docs.ropensci.org/deposits/reference/dcmi_terms.html).
+This validation procedure is intended to issue instructive errors
+throughout when metadata do not conform to the expected format, with
+this vignette demonstrating several such error messages.
+
+Let’s start with a minimal version of the metadata list shown above, and
+try to validate that using [the `deposit_fill_metadata()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-fill-metadata-):
+
+``` r
+
+metadata <- list (
+    author = "P.S. Reynolds",
+    title = "Time-series analyses of beaver body temperatures."
+)
+cli <- depositsClient$new (service = "zenodo", sandbox = TRUE)
+cli$deposit_fill_metadata (metadata)
+```
+
+    #>   instancePath             schemaPath              keyword additionalProperty
+    #> 1              #/additionalProperties additionalProperties             author
+    #>                               message
+    #> 1 must NOT have additional properties
+    #> Error:
+    #> ! Stopping because the DCMI metadata terms listed above do not conform with the expected schema.
+
+That error tells us that “author” is an additional property, and that
+the metadata “must NOT have additional properties.” These “additional
+properties” refer to any beyond those specified in the schema. The
+schema used to validate deposits metadata is contained in [the package’s
+`dc/schema.json`
+file](https://github.com/ropenscilabs/deposits/blob/main/inst/extdata/dc/schema.json).
+A copy of that file is included with each installation of this package
+in the location given by,
+
+``` r
+
+system.file (fs::path ("extdata", "dc", "schema.json"), package = "deposits")
+#> [1] "/github/home/R/x86_64-pc-linux-gnu-library/4.6/deposits/extdata/dc/schema.json"
+```
+
+Searching for “author” either on the GitHub version or a local file will
+quickly reveal that author information belongs in a field called
+“creator”. Renaming that metadata item then gives,
+
+``` r
+
+metadata <- list (
+    creator = "P.S. Reynolds",
+    title = "Time-series analyses of beaver body temperatures."
+)
+cli$deposit_fill_metadata (metadata)
+```
+
+    #>   instancePath                        schemaPath keyword  type
+    #> 1     /creator #/properties/creator/anyOf/0/type    type array
+    #> 2     /creator #/properties/creator/anyOf/1/type    type array
+    #> 3     /creator        #/properties/creator/anyOf   anyOf  <NA>
+    #>                        message required
+    #> 1                must be array     name
+    #> 2                must be array     name
+    #> 3 must match a schema in anyOf     <NA>
+    #> Error:
+    #> ! Stopping because the DCMI metadata terms listed above do not conform with the expected schema.
+
+The first messages say that the “creator” property “must be array”.
+Arrays in JSON are `list` objects in R, so this suggests the next
+required modification:
+
+``` r
+
+metadata <- list (
+    creator = list ("P.S. Reynolds"),
+    title = "Time-series analyses of beaver body temperatures."
+)
+cli$deposit_fill_metadata (metadata)
+```
+
+    #>   instancePath                              schemaPath keyword   type
+    #> 1   /creator/0 #/properties/creator/anyOf/0/items/type    type object
+    #> 2   /creator/0 #/properties/creator/anyOf/1/items/type    type object
+    #> 3     /creator              #/properties/creator/anyOf   anyOf   <NA>
+    #>                        message required
+    #> 1               must be object     name
+    #> 2               must be object     name
+    #> 3 must match a schema in anyOf     <NA>
+    #> Error:
+    #> ! Stopping because the DCMI metadata terms listed above do not conform with the expected schema.
+
+The items within the “creator” field must now be of type “object.” R
+being the relatively simply language that it is, “objects” are also
+`list`s, leading us to:
+
+``` r
+
+metadata <- list (
+    creator = list (list ("P.S. Reynolds")),
+    title = "Time-series analyses of beaver body temperatures."
+)
+cli$deposit_fill_metadata (metadata)
+```
+
+    #>   instancePath                              schemaPath keyword   type
+    #> 1   /creator/0 #/properties/creator/anyOf/0/items/type    type object
+    #> 2   /creator/0 #/properties/creator/anyOf/1/items/type    type object
+    #> 3     /creator              #/properties/creator/anyOf   anyOf   <NA>
+    #>                        message required
+    #> 1               must be object     name
+    #> 2               must be object     name
+    #> 3 must match a schema in anyOf     <NA>
+    #> Error:
+    #> ! Stopping because the DCMI metadata terms listed above do not conform with the expected schema.
+
+And that generates the same error. Looking a bit further in the error
+output reveals that the object has a “required” property of “name”. More
+generally, for any instances in which the error messages themselves are
+not helpful, it is useful to refer to the [actual JSON
+schema](https://github.com/ropenscilabs/deposits/blob/main/inst/extdata/dc/schema.json)
+(or a local version). The “creator” field expected for the Zenodo
+service can then be seen to accept the properties, “name”,
+“affiliation”, “orcid”, and “gnd”, with the “name” property being
+required, as indicated by the error message.
+
+``` r
+
+metadata <- list (
+    creator = list (list (name = "P.S. Reynolds")),
+    title = "Time-series analyses of beaver body temperatures."
+)
+cli$deposit_fill_metadata (metadata)
+```
+
+    #>   instancePath                     schemaPath  keyword missingProperty
+    #> 1    /metadata #/properties/metadata/required required     description
+    #>                                     message
+    #> 1 must have required property 'description'
+    #> Error:
+    #> ! Stopping because the metadata terms listed above do not conform with the expected schema for the zenodo service.
+
+That error seems to indicate that our “creator” field is then valid, yet
+triggers a further error that that metadata “must have required property
+‘description’”. Let’s add that:
+
+``` r
+
+metadata <- list (
+    creator = list (list (name = "P.S. Reynolds")),
+    title = "Time-series analyses of beaver body temperatures.",
+    description = "Original source of 'beaver' data, in Chapter 11 of  Lange, N., Ryan, L., Billard, L., Brillinger, D., Conquest, L. and Greenhouse, J. eds (1994) Case Studies in Biometry."
+)
+cli$deposit_fill_metadata (metadata)
+```
+
+That now works, although that does not capture the full metadata shown
+above from [`?beaver1`](https://rdrr.io/r/datasets/beavers.html). We
+still need information on the publisher. Examining the JSON schema shows
+that it includes a “publisher” field which is expected to be a string.
+
+``` r
+
+metadata <- list (
+    creator = list (list (name = "P.S. Reynolds")),
+    title = "Time-series analyses of beaver body temperatures.",
+    description = "Original source of 'beaver' data, in Chapter 11 of  Lange, N., Ryan, L., Billard, L., Brillinger, D., Conquest, L. and Greenhouse, J. eds (1994) Case Studies in Biometry.",
+    publisher = "John Wiley and Sons"
+)
+cli$deposit_fill_metadata (metadata)
+```
+
+We may then wish to specify a date on which the resource was created.
+Searching for “date” in the schema itself reveals that there is a “date”
+field, but it is intended to describe, “A point or period of time
+associated with an event in the lifecycle of the resource.” There are
+various other “date” fields, but the one we want is pretty clearly the
+“created” field, which is expected to be a string in either “date” or
+“date-time” format. Let’s try a simple “date”:
+
+``` r
+
+metadata <- list (
+    creator = list (list (name = "P.S. Reynolds")),
+    created = "1994-01-01",
+    title = "Time-series analyses of beaver body temperatures.",
+    description = "Original source of 'beaver' data, in Chapter 11 of  Lange, N., Ryan, L., Billard, L., Brillinger, D., Conquest, L. and Greenhouse, J. eds (1994) Case Studies in Biometry.",
+    publisher = "John Wiley and Sons"
+)
+cli$deposit_fill_metadata (metadata)
+```
+
+    #>   instancePath                  schemaPath keyword    format
+    #> 1     /created #/properties/created/format  format date-time
+    #>                         message
+    #> 1 must match format "date-time"
+    #> Error:
+    #> ! Stopping because the metadata terms listed above do not conform with the expected schema for the zenodo service.
+
+That then fails because “created” must match the format “date-time”,
+even though the main JSON schema clearly indicates that either date or
+date-time strings are acceptable. This error reflects the fact that
+validation of deposits metadata is a two-stage process. The metadata are
+first validated against the general JSON schema described above, then
+converted to formats expected for the nominated deposits service, and
+the result is then validated again against a service-specific JSON
+schema. In this case, the Zenodo service itself requires “created”
+fields to have “date-time”, and not “date”, format.
+
+``` r
+
+metadata <- list (
+    creator = list (list (name = "P.S. Reynolds")),
+    created = "1994-01-01T00:00:00",
+    title = "Time-series analyses of beaver body temperatures.",
+    description = "Original source of 'beaver' data, in Chapter 11 of  Lange, N., Ryan, L., Billard, L., Brillinger, D., Conquest, L. and Greenhouse, J. eds (1994) Case Studies in Biometry.",
+    publisher = "John Wiley and Sons"
+)
+cli$deposit_fill_metadata (metadata)
+```
+
+That metadata is then finally in a valid format for the Zenodo service.
+An instructive exercise is to change the service to “figshare”, and use
+the resultant error messages to tweak the metadata to the expected
+format for a Figshare deposit.
+
+### Metadata to specify connections between deposits
+
+The schema permits many other fields, importantly including fields
+intended to be used by the deposits package to document and identify
+connections between different data resources. These include “hasPart”,
+“hasVersion”, “isPartOf”, “isReferencedBy”, “isReplacedBy”,
+“isRequiredBy”, and “isVersionOf”. Specifying these allows one deposit
+to be connected to others. One of the aims of the deposits package is to
+facilitate specification of these kinds of metadata, and so to enhance
+an ability to inter-connect and inter-relate different data depositions,
+providing insight into a growing ecosystem of inter-connected deposits.
+
+These “is” and “has” metadata fields have complex structures, but again
+the JSON schemas can and should be used to understand the expected
+format. The `isPartOf` field for Zenodo is expected to by an array (in R
+terms, a `list`) of objects, each of which must have an “identifier” and
+“relation”, and may also have a “resource_type”.
+
+``` r
+
+metadata <- list (
+    creator = list (list (name = "P.S. Reynolds")),
+    created = "1994-01-01T00:00:00",
+    title = "Time-series analyses of beaver body temperatures.",
+    description = "Original source of 'beaver' data, in Chapter 11 of  Lange, N., Ryan, L., Billard, L., Brillinger, D., Conquest, L. and Greenhouse, J. eds (1994) Case Studies in Biometry.",
+    publisher = "John Wiley and Sons",
+    isPartOf = list (list (
+        identifier = "Case Studies in Biometry",
+        relation = "isPartOf"
+    ))
+)
+cli$deposit_fill_metadata (metadata)
+```
+
+While those metadata are successfully validated, attempting to create
+that deposit on Zenodo would trigger an error, because the “identifier”
+must conform to an expected type. The JSON schema should as always be
+considered the definitive reference, and that states for “identifier”
+that:
+
+> “Supported identifiers include: DOI, Handle, ARK, PURL, ISSN, ISBN,
+> PubMed ID, PubMed Central ID, ADS Bibliographic Code, arXiv, Life
+> Science Identifiers (LSID), EAN-13, ISTC, URNs and URLs.”
+
+The “Case Studies in Biometry” book has an “ARK” identifier which can be
+used here,
+
+``` r
+
+metadata <- list (
+    creator = list (list (name = "P.S. Reynolds")),
+    created = "1994-01-01T00:00:00",
+    title = "Time-series analyses of beaver body temperatures.",
+    description = "Original source of 'beaver' data, in Chapter 11 of  Lange, N., Ryan, L., Billard, L., Brillinger, D., Conquest, L. and Greenhouse, J. eds (1994) Case Studies in Biometry.",
+    publisher = "John Wiley and Sons",
+    isPartOf = list (list (
+        identifier = "ark:/13960/t0mt2n370",
+        relation = "isPartOf"
+    ))
+)
+cli$deposit_fill_metadata (metadata)
+```
+
+Examining the JSON schema also reveals that “isPartOf” allows one
+additional field of “resource_type”, which has to be an upload,
+publication, or image type followed by a type specification. These type
+specifications are included in the second JSON schema used to validate
+Zenodo-specific metadata. The [GitHub version can be seen
+here](https://github.com/ropenscilabs/deposits/blob/main/inst/extdata/zenodo/schema.json),
+or the location of the locally-installed version found with,
+
+``` r
+
+system.file (fs::path ("extdata", "zenodo", "schema.json"), package = "deposits")
+#> [1] "/github/home/R/x86_64-pc-linux-gnu-library/4.6/deposits/extdata/zenodo/schema.json"
+```
+
+This schema then reveals the accepted types for “publication” include
+“book”, so the “resource_type” becomes “publication-book”:
+
+``` r
+
+metadata <- list (
+    creator = list (list (name = "P.S. Reynolds")),
+    created = "1994-01-01T00:00:00",
+    title = "Time-series analyses of beaver body temperatures.",
+    description = "Original source of 'beaver' data, in Chapter 11 of  Lange, N., Ryan, L., Billard, L., Brillinger, D., Conquest, L. and Greenhouse, J. eds (1994) Case Studies in Biometry.",
+    publisher = "John Wiley and Sons",
+    isPartOf = list (list (
+        identifier = "ark:/13960/t0mt2n370",
+        relation = "isPartOf",
+        resource_type = "publication-book"
+    ))
+)
+cli$deposit_fill_metadata (metadata)
+```
+
+Finally we can confirm that those metadata are in a format which will be
+accepted on our specific Zenodo service by creating a new deposit:
+
+``` r
+
+cli$deposit_new ()
+#> ID of new deposit : 1186243
+print (cli)
+#> <deposits client>
+#>  deposits service : zenodo
+#>            sandbox: TRUE
+#>          url_base : https://sandbox.zenodo.org/api/
+#>  Current deposits : 1 (see 'deposits' element for details)
+#>
+#>  url_service : https://sandbox.zenodo.org/deposit/1186243
+#>   deposit id : 1186243
+#>     hostdata : list with 14  elements
+#>     metadata : 6 terms (see 'metadata' element for details)
+```
+
+And that deposit has been successfully created, with the Zenodo record
+populated with appropriately-translated versions of the metadata.
+
+## Metadata templates
+
+An alternative way to enter metadata into a deposits client is via a
+local JSON metadata file. `depostis` includes the function,
+[`deposits_metadata_template()`](https://docs.ropensci.org/deposits/reference/deposits_metadata_template.html),
+which generates a local version of a complete template for all allowed
+metadata fields. Note that deposits workflows are generally expected to
+use metadata templates defined as part of [a “frictionless”
+workflow](https://frictionlessdata.io), as described in detail in the
+accompanying [frictionless
+vignette](https://docs.ropensci.org/deposits/articles/frictionless.html).
+The
+[`deposits_metadata_template()`](https://docs.ropensci.org/deposits/reference/deposits_metadata_template.html)
+is intended more for demonstration purposes, while a full frictionless
+template is generally preferred. The format of deposits metadata
+nevertheless remains the same in both.
+
+``` r
+
+f <- fs::file_temp (ext = ".json")
+deposits_metadata_template (filename = f)
+#> Edit the file [/tmp/RtmpyTTyc1/file7a35b8306db.json] and remove everything except the metadata fields you require.
+#> The filename may be then passed as the 'metadata' argument to a 'deposits' client.
+```
+
+That command issues an important note, given in even more detail in the
+first line of the resultant template:
+
+``` r
+
+head (readLines (f), 2L) [2]
+#> [1] "  \"_note\": \"Fields like this starting with underscores are comments. Please delete this field, and all fields in this template except for those you wish to use for your deposit. This template may NOT be used in anything like this default form to construct a 'deposits' client. Many values require editing to comply with expected formats described throughout, such as dates or fields expected to accord with some fixed vocabulary, or modification from text descriptions to JSON objects. Please refer to the main 'dc/schema' file of the 'deposits' package for full details.\","
+```
+
+A version of that template modified to reflect the metadata defined
+above would then look like this:
+
+    #> {
+    #>   "created": "1994-01-01T00:00:00",
+    #>   "creator": [
+    #>     {
+    #>       "name": "P.S. Reynolds"
+    #>     }
+    #>   ],
+    #>   "description": "Original source of 'beaver' data, in Chapter 11 of  Lange, N., Ryan, L., Billard, L., Brillinger, D., Conquest, L. and Greenhouse, J. eds (1994) Case Studies in Biometry.",
+    #>   "isPartOf": [
+    #>     {
+    #>       "identifier": "ark:/13960/t0mt2n370",
+    #>       "relation": "isPartOf",
+    #>       "resource_type": "publication-book"
+    #>     }
+    #>   ],
+    #>   "publisher": "John Wiley and Sons",
+    #>   "title": "Time-series analyses of beaver body temperatures."
+    #> }
+
+The format of each item within this JSON object then then matches the
+specifications of the [main `dc/schema.json`
+file](https://github.com/ropenscilabs/deposits/blob/main/inst/extdata/dc/schema.json).
+Note that that schema expects both the “creator” and “isPartOf” fields
+for Zenodo to be of type “array”. Arrays in JSON are defined by square
+brackets, `[ ... array contents ...]`. Both of these arrays are then
+expected to have items of type “object”, which in JSON are defined by
+curly brackets, `{ ... object contents ...}`.
+
+Those are the only two key aspects of JSON specification required to
+understand and use metadata templates in deposits:
+
+- A JSON “array” is defined within square brackets, and may contain any
+  number of items: `[ ... array ...]`.
+- A JSON “object” is defined within curly brackets, and must generally
+  follow a defined structure: `{ ... object ...}`.
+
+Both “array” and “object” items in JSON are represented in R terms as
+`list`s, so an array of objects simply becomes `list(list(...))`, as
+demonstrated in the first second of this vignette. (While this means
+that objects composed of arrays could cause confusion, these are
+relatively uncommon, and are not used in any of the JSON schemas within
+the deposits package.)
+
+### Valid JSON Files
+
+The schema for the “creator” field shown above requires (for Zenodo) an
+“array” of items, each of which is an “object” which must include a
+“name” field, and may include additional fields for “affiliation”,
+“orcid”, and “gnd”. An example JSON specification for “creator” would
+thus be:
+
+    {
+      "creator": [
+        {
+          "name": "A. Person",
+          "orcid": "0000-0001-0002-0003"
+        },
+        {
+          "name": "B. Person"
+        }
+      ]
+    }
+
+Because “creator” is an “array”, it may contain multiple unnamed items.
+In contrast, items within an “object” must generally be named, and
+schemas will generally expect single instances only of each item within
+an “object.” Switching the square and curly brackets in that definition
+would invalidate the JSON file, and would trigger an error in deposits.
+
+Errors in the validation of JSON files themselves are, however, nowhere
+near as informative as errors arising through comparing JSON files with
+schemas. If a JSON file is itself invalid, the errors shown by deposits
+will generally be uninformative. It is therefore very important to
+ensure that JSON metadata files are formatted in a valid way. The
+easiest way to check validity before passing a metadata file to a
+deposits client is to use [the `validate()` function of the `jsonlite`
+package](https://cran.r-project.org/package=jsonlite). This function
+requires a string input, so should be called as
+`jsonlite::validate(readLines("metadata.json"))`.
+
+This example demonstrates one important aspect of hand-writing JSON
+files, which is commas. Commas **must** be used to separate any
+sequential fields, and **must not** be placed at the end of any
+individual or sequence of fields. The first statement means that valid
+JSON requires commas like this:
+
+    {
+      "field1": "value1",
+      "field2": "value2"
+    }
+
+That specification without the comma would not be valid. The second
+statement means that placing a comma after the second `"value2"`
+statement would also render that JSON invalid. Note that these commas
+are equally important in separating JSON objects:
+
+    {
+      "object1": {
+        "field": "value"
+      },
+      "object2": {
+        "field": "value"
+      }
+    }
+
+That specification requires the single comma separating the two objects.
+Placing commas anywhere else, such as after the values, or at the end of
+“object2”, would then invalidate the JSON.
+
+## Metadata and the deposits frictionless workflow
+
+As described in detail in [the “frictionless”
+vignette](https://docs.ropensci.org/deposits/articles/frictionless.html),
+deposits is designed to work seamlessly with [the “frictionless”
+workflow](https://frictionlessdata.io/), via rOpenSci’s [“frictionless”
+R package](https://docs.ropensci.org/frictionless). For metadata, this
+means that as soon as a data resource is uploaded to a service (with
+[the `deposit_upload_file()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-upload-file-)),
+a “datapackage.json” file is automatically created and filled with both
+descriptions of the uploaded file, or “resource” in frictionless terms,
+as well as the metadata described in this vignette. From that point
+onward, metadata can be edited directly in the “datapackage.json” file,
+and both the local client and external deposit can always be updated any
+time those local data are modified with [the `deposit_update()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-update-).
+
+In conclusion: from the moment your deposit has its own
+“datapackage.json” file, that should be considered the definitive record
+of all metadata. Any changes you may wish to make to those metadata
+should be made by directly editing that file, and deposits will update
+all corresponding local and remote records.
+
+After restarting an R session, a deposits client can be connected to a
+local deposit by passing the path to the local directory containing
+deposit data and a “datapackage.json” file as the “metadata” parameter
+of the `new()` method:
+
+``` r
+
+cli <- depositsClient$new (
+    service = "<service>",
+    metadata = "/<local>/<directory>/<or>/<frictionless_file>"
+)
+```
+
+Equivalently, start an empty deposits client, and fill the metadata with
+[the `deposit_fill_metadata()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-fill-metadata-):
+
+``` r
+
+cli <- depositsClient$new (service = "<service>")
+path <- "/<local>/<directory>/<or>/<frictionless_file>"
+cli$deposit_fill_metadata (metadata = path)
+```
+
+The resultant client will fill the “metadata” field with the contents of
+the “datapackage.json” file. If the deposit also exists remotely, any
+local changes to “datapackage.json” will be reflected in changes on the
+remote deposits service, including changes within the copy of
+“datapackage.json” held there.

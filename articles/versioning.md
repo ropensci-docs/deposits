@@ -1,0 +1,104 @@
+# Publication and versioning
+
+The
+[main](https://docs.ropensci.org/deposits/articles/deposits.html#publishing-a-deposit)
+and [example
+workflow](https://docs.ropensci.org/deposits/articles/workflow.html#publishing-a-deposit)
+vignettes both finish with publication. While publication of data may
+often be viewed as a singular act, after which data remain indefinitely
+available in the same static state in which they were first published,
+data may also evolve and develop after initial publication. The
+versioning abilities of deposits allow for updated versions of deposits
+to be created and published. A single static URL will then generally
+resolve to the latest published version, yet all previous versions will
+also remain accessible.
+
+Not all host systems have explicit interfaces for version control, and
+so deposits offers two distinct versioning process: one for host systems
+which explicitly record version numbers, and another for those without.
+In all cases, versioning is only applicable to *published* deposits.
+Private deposits may only exist in a single version, and these
+versioning functions will generally not be able to be applied.
+
+## Explicit version control
+
+Zenodo offers explicit control over versioning, enabling all aspects
+including version numbers of deposits, to be specified and updated when
+desired. This vignette presumes that a copy of a published deposit also
+exists locally, and that aspects of data and/or metadata in this local
+version have been updated, and so differ from those in the published
+version. The first step is to retrieve the published version, and fill a
+client with the updated metadata. This is done by passing the local
+`path` to the directory containing the deposit to the
+[`deposit_fill_metadata()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-fill-metadata-)
+method. This code also uses the Zenodo “sandbox” environment to trial
+the functions without publication on Zenodo itself.
+
+``` r
+
+library (deposits)
+cli <- depositsClient$new (service = "zenodo", sandbox = TRUE)
+my_id <- cli$deposits$id [1] # select deposit to retreive
+cli$deposit_retrieve (my_id)
+# path <- "/<local>/<path>/<to>/<deposit>/"
+path <- "/data/mega/code/repos/pre-processing-r/typetracer"
+cli$deposit_fill_metadata (path)
+```
+
+A new version can then be created by calling:
+
+``` r
+
+cli$deposit_version ()
+```
+
+The client will then reveal a different, updated deposit ID value and
+corresponding URL. Clicking on that (or copying into a web browser) will
+then open a page in “edit” mode, containing the updated metadata fields.
+The new version can then be published with the [`deposit_publish()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-publish-).
+The primary URL of the deposit will then resolve to the latest published
+version.
+
+Versions can be edited and updated as described in the
+[main](https://docs.ropensci.org/deposits/articles/deposits.html#editing-and-updating-deposits)
+and
+[workflow](https://docs.ropensci.org/deposits/articles/workflow.html)
+vignettes, through using the [`deposit_update()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-update-).
+Versions created with the [`deposit_version()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-version-)
+remain private until published. These versions may also be cancelled or
+deleted by calling
+[`cli$deposit_delete()`](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-delete-).
+
+## Services without explicit version control
+
+Figshare does not offer explicit control of versions. Instead, a deposit
+may be edited at any time. Re-publishing an edited deposit then
+increments an internal version number, from 1 to 2 for a first version,
+and further increments for subsequent versions. The [`deposit_version()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-version-)
+described above only applies to service with explicit version control.
+New versions on Figshare may be created from deposits by updating
+metadata (for example, by using the [`deposit_fill_metadata()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-fill-metadata-)
+demonstrated above, and then calling these two methods:
+
+``` r
+
+cli$deposit_update ()
+cli$deposit_publish ()
+```
+
+The only difference to the workflow for Zenodo is that
+[`deposit_update()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-update-)
+is called instead of [`deposit_version()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-version-).
+Any updates created with the [`deposit_update()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-update-)
+are private until published. These updates may also be cancelled or
+deleted by calling
+[`cli$deposit_delete()`](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-delete-).

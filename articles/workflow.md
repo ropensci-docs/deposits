@@ -1,0 +1,403 @@
+# Example deposits workflow
+
+This vignette provides an example of a complete deposits workflow, from
+initiation of a deposits client through to data publication.
+
+## Initial Metadata
+
+As described in [the metadata
+vignette](https://docs.ropensci.org/deposits/articles/metadata.html),
+deposits start with metadata describing general aspects of the data
+being deposited, such as a title, description, identification of
+creators, and any other aspects specified in [the deposits metadata JSON
+schema](https://github.com/ropenscilabs/deposits/blob/main/inst/extdata/dc/schema.json).
+
+This workflow will use the same “beaver” datasets as [the metadata
+vignette](https://docs.ropensci.org/deposits/articles/metadata.html),
+from [R’s “datasets”
+package](https://stat.ethz.ch/R-manual/R-devel/library/datasets/html/beavers.html).
+That vignette demonstrated how to use the error messages triggered by
+incorrectly specified metadata to work towards the following,
+schema-compliant specification:
+
+``` r
+
+metadata <- list (
+    creator = list (list (name = "P.S. Reynolds")),
+    created = "1994-01-01T00:00:00",
+    title = "Time-series analyses of beaver body temperatures.",
+    description = "Original source of 'beaver' data, in Chapter 11 of  Lange, N., Ryan, L., Billard, L., Brillinger, D., Conquest, L. and Greenhouse, J. eds (1994) Case Studies in Biometry.",
+    publisher = "John Wiley and Sons",
+    isPartOf = list (list (
+        identifier = "ark:/13960/t0mt2n370",
+        relation = "isPartOf"
+    ))
+)
+```
+
+The “isPartOf” element is a key part of “deposits” metadata, enabling
+individual data sources to be systematically related to other resources,
+in this case to the book first describing these data which has an
+associated “ark” identifier. These fields are intended to help linking
+data depositions with other project outcomes, such as publications,
+other data sets, or general project descriptions. Fields for these
+purposes include “hasPart”, “hasVersion”, “isPartOf”, “isReferencedBy”,
+“isReplacedBy”, “isRequiredBy”, and “isVersionOf”, with details of all
+fields given in the [deposits JSON
+schema](https://github.com/ropenscilabs/deposits/blob/main/inst/extdata/dc/schema.json).
+
+Those metadata can then be used to initiate a deposits client with [the
+`new()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-depositsClient-new),
+demonstrated here with `sandbox = TRUE` to use the Zenodo “sandbox”
+environment.
+
+``` r
+
+cli <- depositsClient$new (
+    service = "zenodo",
+    sandbox = TRUE,
+    metadata = metadata
+)
+print (cli)
+#> <deposits client>
+#> deposits service : zenodo
+#>           sandbox: TRUE
+#>         url_base : https://sandbox.zenodo.org/api/
+#> Current deposits : <none>
+#>
+#>   hostdata : <none>
+#>   metadata : 6 terms (see 'metadata' element for details)
+```
+
+The metadata can be edited and extended as desired. The metadata
+recorded in the deposits client can be updated after each edit with [the
+`deposit_fill_metadata()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-fill-metadata-):
+
+``` r
+
+cli$deposit_fill_metadata (metadata)
+```
+
+While it is always possible to edit deposits metadata directly by
+passing values to [the `deposit_fill_metadata()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-fill-metadata-),
+the recommended procedure is to generate a “frictionless” metadata file,
+as described in [the vignette of the same
+name](https://docs.ropensci.org/deposits/articles/frictionless.html),
+and to edit the metadata directly in that file. This procedure is
+demonstrated in the following section. A frictionless metadata file can
+only be initially generated in response to an actual data resource, and
+thus the next section begins by generating some example data.
+
+## Preparing data sources
+
+The [“beaver”
+data](https://stat.ethz.ch/R-manual/R-devel/library/datasets/html/beavers.html)
+actually comprises two datasets, “beaver1” and “beaver2”, each of which
+is a time series of body temperature measurements from an individual
+beaver. For data sources to be uploaded by deposits, they must first
+exist on a local computer, meaning in this case that copies of these
+beaver datasets must first be written to local files.
+
+The deposits package presumes that a single deposits lives within a
+dedicated local directory which includes all associated files. Let’s
+start by making a temporary directory and storing the “beaver” data
+there:
+
+``` r
+
+beaver_dir <- file.path (tempdir (), "beaver")
+if (!dir.exists (beaver_dir)) {
+    dir.create (beaver_dir)
+}
+bv1 <- file.path (beaver_dir, "beaver1.csv")
+write.csv (datasets::beaver1, bv1, row.names = FALSE)
+bv2 <- file.path (beaver_dir, "beaver2.csv")
+write.csv (datasets::beaver1, bv2, row.names = FALSE)
+```
+
+We can then connect the deposits client with that local directory with
+the [`deposit_add_resource()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-add-resource-):
+
+``` r
+
+cli$deposit_add_resource (beaver_dir)
+```
+
+Printing the client, by typing `print(cli)`, or simply `cli`, then
+reveals that it has been connected with the local directory holding
+those data:
+
+``` r
+
+print (cli)
+#> <deposits client>
+#> deposits service : zenodo
+#>           sandbox: TRUE
+#>         url_base : https://sandbox.zenodo.org/api/
+#> Current deposits : <none>
+#>
+#>   hostdata : <none>
+#>   metadata : 6 terms (see 'metadata' element for details)
+#> local_path : /tmp/RtmpPru5st/beaver
+#>  resources : 2 local, 0 remote
+```
+
+### Frictionless metadata
+
+Calling the [`deposit_add_resource()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-add-resource-):
+the first time also writes a [“frictionless” metadata
+file](https://docs.ropensci.org/deposits/articles/frictionless.html#local-generation)
+to the `local_path` directory:
+
+``` r
+
+list.files (beaver_dir)
+#> [1] "beaver1.csv"      "beaver2.csv"      "datapackage.json"
+```
+
+The additional “datapackage.json” file is initially generated by [the
+“frictionless” R package](https://docs.ropensci.org/frictionless), which
+automatically fills out details of each “resource”, or local file, in a
+“resources” section. The deposits package then inserts the metadata
+specified above into an additional “metadata” section of the file. The
+following code illustrates a portion of the contents of that file:
+
+``` r
+
+dp <- list.files (beaver_dir, pattern = "datapackage", full.names = TRUE)
+readLines (dp) [1:25]
+#>  [1] "{"
+#>  [2] "  \"profile\": \"tabular-data-package\","
+#>  [3] "  \"metadata\": {"
+#>  [4] "    \"created\": \"1994-01-01T00:00:00\","
+#>  [5] "    \"creator\": ["
+#>  [6] "      {"
+#>  [7] "        \"name\": \"P.S. Reynolds\""
+#>  [8] "      }"
+#>  [9] "    ],"
+#> [10] "    \"description\": \"Original source of 'beaver' data, in Chapter 11 of  Lange, N., Ryan, L., Billard, L., Brillinger, D., Conquest, L. and Greenhouse, J. eds (1994) Case Studies in Biometry.\","
+#> [11] "    \"isPartOf\": ["
+#> [12] "      {"
+#> [13] "        \"identifier\": \"ark:/13960/t0mt2n370\","
+#> [14] "        \"relation\": \"isPartOf\""
+#> [15] "      }"
+#> [16] "    ],"
+#> [17] "    \"publisher\": \"John Wiley and Sons\","
+#> [18] "    \"title\": \"Time-series analyses of beaver body temperatures.\""
+#> [19] "  },"
+#> [20] "  \"resources\": ["
+#> [21] "    {"
+#> [22] "      \"name\": \"beaver1\","
+#> [23] "      \"path\": \"beaver1.csv\","
+#> [24] "      \"profile\": \"tabular-data-resource\","
+#> [25] "      \"format\": \"csv\","
+```
+
+Once a frictionless “datapackage.json” file has been generated, any
+subsequent editing of metadata should be done by directly editing that
+file. Editing should also generally involve extending the
+automatically-inserted “resource” metadata describing the structure of
+the actual files, as described in the documentation for [the
+frictionless R package](https://docs.ropensci.org/frictionless).
+
+Edited and updated versions of metadata can then be loaded into a
+deposits client by passing the path to the directory as the `path`
+argument to [the `deposit_update()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-update-).
+
+``` r
+
+cli$deposit_update (beaver_dir)
+```
+
+Instead of `beaver_dir`, the full path to the local “datapackage.json”
+file can also be passed. While the same effect can be achieved by
+calling [the `deposit_fill_metadata()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-fill-metadata-)
+for deposits which have not been initiated on the remote service, the
+[`deposit_update()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-update-)
+has additional effects after that point, and is the recommended method
+once a “datapackage.json” file has been generated. This is demonstrated
+in the subsequent section.
+
+The following code demonstrates modification and updating of metadata by
+first modifying the “title”, and then showing that those changes are
+reflected in the client itself:
+
+``` r
+
+m <- readLines (dp)
+i <- grep ("\"title\"", m)
+m [i] <- gsub ("Time", "Modified time", m [i])
+writeLines (m, dp)
+
+cli$metadata$title # original title
+#> [1] "Time-series analyses of beaver body temperatures."
+cli$deposit_update (beaver_dir)
+cli$metadata$title
+#> [1] "Modified time-series analyses of beaver body temperatures."
+```
+
+In short, metadata editing with deposits is generally done by editing a
+local “datapackage.json” file, after which a deposits client can then be
+updated with [the `deposit_update()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-update-).
+
+## Initiating a remote deposit
+
+The metadata held within a deposits client can be used to initiate a
+remote deposit on the specified service with [the `deposit_new()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-new-):
+
+``` r
+
+cli$deposit_new ()
+#> ID of new deposit : 1065666
+print (cli)
+#> <deposits client>
+#>  deposits service : zenodo
+#>            sandbox: TRUE
+#>          url_base : https://sandbox.zenodo.org/api/
+#>  Current deposits : <none>
+#>
+#>  url_service : https://sandbox.zenodo.org/deposit/1065666
+#>   deposit id : 1065666
+#>     hostdata : list with 14  elements
+#>     metadata : 7 terms (see 'metadata' element for details)
+#>   local_path : /tmp/RtmpMd4uB8/beaver
+#>    resources : 2 local, 0 remote
+```
+
+The client now contains additional “hostdata” elements, containing all
+data recorded by Zenodo for that deposit. The default print method for
+the client now also lists additional information including a URL for the
+new deposit, and a unique identifier. In most R environments, the URL
+can be directly clicked to view the deposit online. All new deposits are
+private, and can only be viewed after first logging in to the service.
+
+Metadata can still be edited and updated within a client through
+modifying the “datapackage.json” file. The metadata held on Zenodo can
+then be updated by calling [the `deposit_update()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-update-).
+
+## Uploading files to a remote deposit
+
+The main purpose of the deposits package, and of online deposition
+services, is to deposit data. This is done with [the
+`deposit_upload_file()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-upload-file-).
+The main parameter, `path`, can also be either a single file or an
+entire directory. If `path` specifies a directory, all files contained
+within that directory are uploaded.
+
+``` r
+
+cli$deposit_upload_file (beaver_dir)
+#> frictionless metadata file has been generated as '/tmp/RtmpCPOaqC/beaver/beaver1.csv'
+cli$hostdata$files [, 1:3]
+```
+
+    #>                           checksum         filename filesize
+    #> 1 c8e7ff1e2e4323198b4be5227ff63864      beaver1.csv     1909
+    #> 2 c8e7ff1e2e4323198b4be5227ff63864      beaver2.csv     1909
+    #> 3 4fd4b5167c28a874170ab611daf824e7 datapackage.json     1225
+
+The “hostdata” of the client now indicate that the three files have been
+successfully uploaded.
+
+### File compression
+
+The [`deposit_upload_file()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-upload-file-)
+includes a `compress` parameter which defaults to `"no"` for no
+compression, but can also be set to `"tar"` or `"zip"` to compress files
+prior to uploading. Compression is generally recommended for large
+files, both to ease uploading and downloading, and to reduce storage
+sizes on the host services. The frictionless “datapackage.json” file is
+always stored in uncompressed format, to enable direct inspection via
+the online platforms. The following code demonstrates the effects of
+file compression:
+
+``` r
+
+cli$deposit_upload_file (beaver_dir, compress = "tar")
+#> frictionless metadata file has been generated as '/tmp/RtmpCPOaqC/beaver/beaver1.csv'
+cli$hostdata$files [, 1:3]
+```
+
+    #>                           checksum         filename filesize
+    #> 1 03dd72dacab515750494745e17e4f37c   beaver1.tar.gz     3584
+    #> 2 713ce15cb9d3c2b2b6ba8d541c0934a5   beaver2.tar.gz     3584
+    #> 3 4fd4b5167c28a874170ab611daf824e7 datapackage.json     1225
+
+The frictionless “datapackage.json” files are never compressed, ensuring
+that their contents can always be viewed on the web interfaces of the
+deposits services. (The increase in sizes of the uploaded files there
+demonstrates that compression often offers little advantage for small
+files. The advantages for large files can nevertheless be considerable,
+and compression is generally recommended.)
+
+To change compression, or to compress a file that was previously
+uploaded in uncompressed form, the file first needs to be removed from
+the deposits service with [the `deposit_delete_file()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-delete-file-),
+and then re-uploaded with either
+[`deposit_upload_file()`](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-upload-file-)
+or
+[`deposit_update()`](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-update-).
+
+### Editing and updating files
+
+The [`deposit_update()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-update-)
+will automatically update any files held on a remote deposits service if
+they have been locally modified. If the local “datapackage.json” file
+has been modified, any changes in the “metadata” section will be brought
+into the local deposits client, and also translated to service-specific
+metadata, posted to the service, and returned in updated “hostdata” of
+the client. The remote version of that file will also be updated.
+
+In short, [the `deposit_upload_file()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-upload-file-)
+is only needed to initially upload files (or directories). Once files
+exist on the remote deposits service, the [`deposit_update()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-update-)
+can be used to automatically upload any modified files to the service.
+
+## Publishing a deposit
+
+The final steps of publishing a deposit, potentially along with an
+embargo date, are described in [the main
+vignette](https://docs.ropensci.org/deposits/articles/deposits.html),
+but copied here for completeness.
+
+Once all metadata and data have been satisfactorily edited, updated, and
+uploaded, a deposit can be made publicly visible and permanently
+associated a Digital Object Identifier (DOI) by publishing it. Prior to
+publishing, it is often desired to apply an “embargo” to the deposit, in
+the form of a date after which the deposit will become publicly visible.
+The two steps to publication are thus generally:
+
+``` r
+
+cli$deposit_embargo (embargo_date = "2030-03-30")
+cli$deposit_publish ()
+```
+
+Calling [the `deposit_publish()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-publish-)
+is irreversible, and can never be undone. The published deposit will be
+permanently associated with the account of the user who published it, as
+identified by [the API token used to initiate the deposits
+client](https://docs.ropensci.org/deposits/articles/install-setup.html#setup-api-tokens).
+Publication will also change many items of the client’s “hostdata”,
+notably involving a change of status or visibility from “private” to
+“public”. Once a deposit has been published, the associated DOI, or
+equivalent the URL given in the deposits client, may be shared as a
+permanent link to the deposit.

@@ -1,0 +1,224 @@
+# frictionless workflows with deposits
+
+As described in [the main
+README](https://docs.ropensci.org/deposits/index.html#the-deposits-workflow),
+the deposits package is designed to work with [rOpenSci’s `frictionless`
+package](https://docs.ropensci.org/frictionless) for documentation of
+datasets. The [`frictionless`
+package](https://docs.ropensci.org/frictionless) is an R implementation
+of the general [“frictionless” workflow](https://frictionlessdata.io).
+All deposits metadata, both for a deposit in general as described in the
+accompanying [metadata
+vignette](https://docs.ropensci.org/deposits/articles/metadata.html),
+and for the internal structure of datasets, are stored in a single
+“frictionless” metadata file called
+[“datapackage.json”](https://frictionlessdata.io/blog/2016/07/21/publish-any/#_2-add-a-datapackage-json-file).
+
+This vignette describes how to generate those files, and how to use them
+to manage deposits metadata.
+
+## Generating “datapackage.json” files
+
+The deposits package uses the [`frictionless` R
+package](https://docs.ropensci.org/frictionless) to automatically
+generate frictionless metadata files named “datapackage.json” for any
+tabular input data. These files can only be generated for one or more
+input data sets, and so can not be generated for deposits metadata
+without accompanying data files or resources.
+
+The following code is repeated from [the main
+vignette](https://docs.ropensci.org/deposits/articles/deposits.html),
+and generates a local data file with some tabular data in an empty
+directory.
+
+``` r
+
+dir.create (file.path (tempdir (), "data"))
+path <- file.path (tempdir (), "data", "beaver1.csv")
+write.csv (datasets::beaver1, path, row.names = FALSE)
+```
+
+We then need to construct a deposits client, and specify metadata, in
+this case those describing [the `beaver1`
+dataset](https://stat.ethz.ch/R-manual/R-devel/library/datasets/html/beavers.html).
+The format of these metadata is explained at length in the [metadata
+vignette](https://docs.ropensci.org/deposits/articles/metadata.html).
+
+``` r
+
+metadata <- list (
+    creator = list (list (name = "P. S. Reynolds")),
+    created = "1994-01-01T00:00:00",
+    title = "Time-series analyses of beaver body temperatures",
+    description = "Original source of 'beaver' dataset."
+)
+cli <- depositsClient$new (service = "zenodo", sandbox = TRUE, metadata = metadata)
+```
+
+### Generation by uploading files
+
+The main vignette demonstrates how to use these metadata to initiate a
+new deposit on the Zenodo sandbox service, and then to upload the local
+data. Calling [the `deposit_upload_file()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-upload-file-)
+automatically generates a “datapackage.json” file (if one does not
+already exist), adds deposits metadata, and also uploads that file to
+the deposits service.
+
+``` r
+
+cli$deposit_new ()
+#> ID of new deposit : 1162420
+cli$deposit_upload_file (path = path)
+#> frictionless metadata file has been generated as '/tmp/RtmpvRre5Z/data/datapackage.json'
+```
+
+The client then lists two files that were uploaded, and the local
+directory also now has a “datapackage.json” file:
+
+``` r
+
+cli$hostdata$files$filename
+#> [1] "beaver1.csv"      "datapackage.json"
+list.files (file.path (tempdir (), "data"))
+#> [1] "beaver1.csv"      "datapackage.json"
+```
+
+The deposits package inserts an additional “metadata” field into the
+frictionless metadata file, containing the deposits metadata defined
+above. This method of generating frictionless metadata files requires
+data to first be uploaded to a service, and will automatically upload
+the frictionless metadata file. Any subsequent editing then requires
+repeated calls to [the `deposit_upload_file()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-upload-file-)
+to update the contents of this file.
+
+### Local generation
+
+A frictionless metadata file can also first be generated locally, to
+allow editing prior to any uploading. This is achieved with [the
+`deposit_add_resource()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-add-resource-).
+As mentioned, the frictionless workflow requires a data “resource” to
+exist. The resource in the above example is the locally-stored
+“beaver.csv” file. Presuming this file to exist, we can again initiate a
+deposit, and then to call
+[`deposit_add_resource()`](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-add-resource-),
+instead of
+[`deposit_upload_file()`](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-upload-file-).
+
+``` r
+
+cli <- depositsClient$new (service = "zenodo", sandbox = TRUE, metadata = metadata)
+cli$deposit_add_resource (path = path)
+```
+
+That call will generate a local frictionless metadata file (if one does
+not already exist), and fill it with the deposits metadata, without
+initiating a new deposit or uploading any files. Whether generated and
+immediately uploading through calling
+[`deposit_upload_file()`](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-upload-file-),
+or locally generated only through calling
+[`deposit_add_resource()`](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-add-resource-),
+the frictionless data file can then be edited and updated as described
+in the following sub-section.
+
+Note that calling either of these methods connects the client to the
+local directory containing the “datapackage.json” file and other data
+files. Printing the client then produces additional information
+including a `local_path` identifying the directory, along with counts of
+both local and remote “resources” or files.
+
+## Reading and editing “datapackage.json” files
+
+The “datapackage.json” file can be read with the
+[`frictionless::read_package()`
+function](https://docs.ropensci.org/frictionless/reference/read_package.html),
+returning a named list of metadata entries:
+
+``` r
+
+library (frictionless)
+path <- file.path (tempdir (), "data", "datapackage.json")
+metadata <- read_package (path)
+names (metadata)
+#> [1] "profile"   "metadata"  "resources" "directory"
+```
+
+The “profile”, “resources”, and “directory” items are all generated by
+[`frictionless`](https://docs.ropensci.org/frictionless/), while the
+“metadata” items holds the deposits metadata entered above:
+
+``` r
+
+metadata$metadata
+#> $created
+#> [1] "1994-01-01T00:00:00"
+#>
+#> $creator
+#> $creator[[1]]
+#> $creator[[1]]$name
+#> [1] "P. S. Reynolds"
+#>
+#> $description
+#> [1] "Original source of 'beaver' dataset."
+#>
+#> $title
+#> [1] "Time-series analyses of beaver body temperatures"
+```
+
+The `frictionless` aspects of the metadata are by default automatically
+generated by that package, and generally benefit from the kind of
+editing and enhancing described in [the main `frictionless`
+vignette](https://docs.ropensci.org/frictionless/articles/frictionless.html#create-and-edit-a-data-package),
+including such things as adding descriptions of variables. The
+deposits-specific “metadata” component can also readily be extended and
+edited as desired.
+
+The data in these files can be edited in two primary ways, through
+either:
+
+1.  Editing the individual list items in R, and saving the result via
+    [`frictionless::write_package()`](https://docs.ropensci.org/frictionless/reference/write_package.html);
+    or,
+2.  Directly editing the “datapackage.json” with a text editor.
+
+We recommend the second method, as it enables the simplest overview over
+the entire metadata structure for a given deposit. Once a frictionless
+“datapackage.json” file has been generated for a deposit, the
+recommended deposits workflow is for all editing and updating of
+metadata to be done by directly editing that file, as explained in [the
+metadata
+vignette](https://docs.ropensci.org/deposits/articles/metadata.html).
+
+## Updating “datapackage.json” on deposits service
+
+Any changes to a local “datapackage.json” file can be imported into a
+deposits client with the [`deposit_update()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-update-),
+which will also update the remote version of the “datapackage.json” file
+held on the deposits service. Because the initial
+[`deposit_upload_file()`](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-upload-file-)
+and
+[`deposit_add_resource()`](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-add-resource-)
+methods both connected the client to the local directory containing the
+deposit data, the update method can be called directly without any
+parameters. Specific paths can nevertheless be passed to the
+[`deposit_update()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-update-),
+to update only specified files while ignoring changes in any other
+files. For example, the `path` argument can specify the path to the
+single “datapackage.json” file, in which case only that file will be
+uploaded, regardless of any local modifications to other files.
+
+``` r
+
+cli$deposit_update ()
+#> Local file at [/tmp/Rtmp5QfAEc/data/beaver1.csv] is identical on host and will not be uploaded.
+#> Local file at [/tmp/Rtmp5QfAEc/data/datapackage.json] has changed and will now be uploaded.
+```
+
+Calling that method will update both the “metadata” and “hostdata”
+elements of the deposits client to reflect any changes made to the
+“datapackage.json” file, and will also update the remote version of that
+file, as indicated in the messages produced by calling that method.
