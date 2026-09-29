@@ -1,0 +1,115 @@
+# The deposits R6 client
+
+The deposits package uses [an `R6` client](https://github.com/r-lib/R6)
+to interface with the individual deposition services. This vignette
+briefly explains explains the properties of a deposits client for those
+unfamiliar with `R6` objects.
+
+### R6 methods
+
+The `R6` package used to construct deposits clients here allows for
+structured class objects in R. The objects include elements (such as
+variables) and methods, which for R are generally functions. A new
+client can be constructed with the `new` operator, which for deposits
+requires specifying the service for which the client is to be
+constructed:
+
+``` r
+
+library (deposits)
+cli <- depositsClient$new (service = "figshare")
+```
+
+Additional functions are called in a similar way, using a `$`-notation,
+in the form `cli$deposit_function()`. The deposits package is
+constructed so that function calls constructed is this way will
+“automatically” update the object itself, and so generally do not need
+to be assigned to a return value. For example, the function
+`deposits_list()` updates the list of deposits on the associated
+service. In conventional R packages, calling this function would require
+assigning a return value like this:
+
+``` r
+
+cli_updated <- cli$deposits_list ()
+```
+
+`R6` objects are, however, always updated internally, so the client
+itself, `cli`, will already include the updated list of deposits without
+any need for assigning the return value to `cli_updated`. That is,
+rather than the above line, all deposits functions may be called simply
+as,
+
+``` r
+
+cli$deposits_list ()
+```
+
+(The single exception to this is the `deposit_download_file()` function,
+which returns the path to the locally downloaded file, and so should
+always be assigned to a return value.)
+
+### Initialising a deposits client
+
+An empty client can be constructed by naming the desired service. An
+additional `sandbox` parameter constructs a client to the `zenodo`
+sandbox environment intended for testing their API. Actual use of the
+`zenodo` API can then be enabled with the default `sandbox = FALSE`.
+
+``` r
+
+cli <- depositsClient$new ("zenodo", sandbox = TRUE)
+cli
+#> <deposits client>
+#> deposits service : zenodo
+#>           sandbox: TRUE
+#>         url_base : https://sandbox.zenodo.org/api/
+#> Current deposits : <none>
+#>
+#>   hostdata : <none>
+#>   metadata : <none>
+```
+
+### The R6 client structure
+
+All `R6` clients share a few build-in methods which can be used to
+understand their internal structure and functionality. In particular,
+both [the
+`ls()`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/ls.html)
+and [str()
+function](https://stat.ethz.ch/R-manual/R-devel/library/utils/html/str.html)s
+reveal internal details of R6 clients. These details are nevertheless
+not particularly helpful here, and the deposits client has it’s own
+[`deposits_methods()`
+function](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposits-methods-)
+intended to provide an overview all all implemented methods:
+
+``` r
+
+cli$deposits_methods ()
+#> List of methods for a deposits client:
+#>
+#>    - deposit_add_resource
+#>    - deposit_delete
+#>    - deposit_delete_file
+#>    - deposit_download_file
+#>    - deposit_embargo
+#>    - deposit_fill_metadata
+#>    - deposit_new
+#>    - deposit_prereserve_doi
+#>    - deposit_publish
+#>    - deposit_retrieve
+#>    - deposit_service
+#>    - deposit_update
+#>    - deposit_upload_file
+#>    - deposit_version
+#>    - deposits_list
+#>    - deposits_methods
+#>    - deposits_search
+#>
+#>  see `?depositsClient` for full details of all methods.
+```
+
+As described in the final line of that output, the documentation
+contains full details of all methods, also provided in [the online
+documentation](https://docs.ropensci.org/deposits/reference/depositsClient.html#methods).

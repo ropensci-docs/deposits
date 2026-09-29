@@ -1,0 +1,614 @@
+# The deposits package
+
+“deposits” is an R package which provides a universal client for
+depositing and accessing research data in a variety of online deposition
+services. Currently supported services are [zenodo](https://zenodo.org)
+and [figshare](https://figshare.com). These two systems have
+fundamentally different interfaces (“API”s, or Application Programming
+Interfaces), and access to these and indeed all deposition services has
+traditionally been enabled through individual software clients. The
+deposits package aims to be a universal client offering access to a
+variety of deposition services, without users having to know any
+specific details of the APIs for each service. This vignette
+demonstrates how the deposits package can be used to manage the
+processes of uploading and publishing research data, using the methods
+summarised in Figure 1.
+
+![Figure 1: Schematic diagram of deposits methods, each of which is
+explained below. All methods have prefixes of “deposit\_”, which are not
+shown in the diagram. Methods connecting to the central “deposits
+Client” all modify its internal properties, whereas the “upload_file”
+and “download_file” methods copy files between local storage and remote
+services without modifying the deposits client itself. The methods
+connecting the client to “Local Storage” only have an effect the first
+time they are called, when they create a local version of a frictionless
+“datapackage.json” file, if one did not previously exist.](fig1.png)
+
+Figure 1: Schematic diagram of deposits methods, each of which is
+explained below. All methods have prefixes of “deposit\_”, which are not
+shown in the diagram. Methods connecting to the central “deposits
+Client” all modify its internal properties, whereas the “upload_file”
+and “download_file” methods copy files between local storage and remote
+services without modifying the deposits client itself. The methods
+connecting the client to “Local Storage” only have an effect the first
+time they are called, when they create a local version of a frictionless
+“datapackage.json” file, if one did not previously exist.
+
+## The deposits client
+
+The deposits package uses [an `R6` client](https://github.com/r-lib/R6)
+to interface with the individual deposition services. A [separate
+vignette](https://docs.ropensci.org/deposits/articles/deposits-R6.html)
+describes the `R6` system for those unfamiliar with it.
+
+### Initialising a deposits client
+
+An empty client can be constructed by naming the desired service. An
+additional `sandbox` parameter constructs a client to the `zenodo`
+sandbox environment intended for testing their API. Actual use of the
+`zenodo` API can then be enabled with the default `sandbox = FALSE`.
+
+``` r
+
+cli <- depositsClient$new ("zenodo", sandbox = TRUE)
+cli
+#> <deposits client>
+#> deposits service : zenodo
+#>           sandbox: TRUE
+#>         url_base : https://sandbox.zenodo.org/api/
+#> Current deposits : <none>
+#>
+#>   hostdata : <none>
+#>   metadata : <none>
+```
+
+Client construction requires personal access or authentication tokens
+for deposits services to be stored as local environment variables, as
+described in the [installation and setup
+document](https://docs.ropensci.org/deposits/articles/install-setup.html#setup-api-tokens).
+Authentication tokens are checked when new clients are constructed, so
+the `$new()` function will only succeed with valid tokens.
+
+As also described [in the
+`README`](https://docs.ropensci.org/deposits/index.html#the-deposits-workflow),
+all methods of a deposits client can be seen with [the
+`deposits_methods()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposits-methods-):
+
+``` r
+
+cli$deposits_methods ()
+#> List of methods for a deposits client:
+#>
+#>    - deposit_add_resource
+#>    - deposit_delete
+#>    - deposit_delete_file
+#>    - deposit_download_file
+#>    - deposit_embargo
+#>    - deposit_fill_metadata
+#>    - deposit_new
+#>    - deposit_prereserve_doi
+#>    - deposit_publish
+#>    - deposit_retrieve
+#>    - deposit_service
+#>    - deposit_update
+#>    - deposit_upload_file
+#>    - deposit_version
+#>    - deposits_list
+#>    - deposits_methods
+#>    - deposits_search
+#>
+#>  see `?depositsClient` for full details of all methods.
+```
+
+All methods are described in detail in the [documentation entry for the
+deposits
+client](https://docs.ropensci.org/deposits/reference/depositsClient.html#methods).
+All methods starting with the singular “deposit\_” prefix operate on
+individual deposits. The final 3 methods starting with “deposits\_” are
+general methods applied to services in general (“list” and “search”), or
+to a deposits client in general (“methods”). The main methods, and
+relationships between them, are also illustrated in Figure 1.
+
+## Metadata
+
+The client constructed above is mostly empty, but nevertheless
+demonstrates the two primary fields or elements of a deposits client,
+the *“hostdata”* and *“metadata”*. Both of these elements represent the
+“metadata” of a deposit, with the data itself referred to as “files”,
+which can be uploaded and downloaded. These files also have accompanying
+metadata, according to [the “frictionless”
+workflow](https://frictionlessdata.io/) as described in the [separate
+“frictionless”
+vignette](https://docs.ropensci.org/deposits/articles/frictionless.html).
+
+There are thus three types of metadata used in a deposits workflow:
+
+1.  *“metadata”* which describe a deposit and associated properties,
+    such as author names and affiliations, deposit titles and
+    descriptions, dates, keywords, links to other deposits or
+    publications, and many other terms. These kinds of metadata are
+    described in [the metadata
+    vignette](https://docs.ropensci.org/deposits/articles/metadata.html).
+2.  *“frictionless metadata”* which describe the actual contents of the
+    data to be deposited. These kinds of metadata are (optionally)
+    generated and (always) handled here by [the `frictionless`
+    package](https://docs.ropensci.org/frictionless). These kind of
+    metadata are described in [the frictionless
+    vignette](https://docs.ropensci.org/deposits/articles/frictionless.html).
+3.  *“hostdata”* which are provided in different formats by the various
+    deposits services, and are intended as *read-only* data used to
+    examine the remote records of a deposit.
+
+The term “metadata” refers through this and all deposits documentation
+to the first of these three kinds, with the second always explicitly
+referred to as “frictionless metadata.” The “metadata” and “frictionless
+metadata” structures remain consistent between services, and allow data
+to be transformed from one format to another, and between local clients
+and remote services. In contrast, the `hostdata` structures are directly
+provided by the deposits host services, generally as lists, and with
+different structures for different services. These structures are
+read-only fields which are automatically filled by the deposits client,
+and are intended to provide insight into metadata records stored on host
+sites.
+
+### Passing metadata to a deposits client
+
+A new deposit is initially constructed by filling the `metadata` field
+with a local representation of metadata. There are several ways of doing
+this, as described in [the separate metadata
+vignette](https://docs.ropensci.org/deposits/articles/metadata.html).
+One of the easiest approaches is to define metadata as a simple list:
+
+``` r
+
+metadata <- list (
+    title = "New Title",
+    abstract = "This is the abstract",
+    creator = list (list (name = "A. Person"), list (name = "B. Person"))
+)
+```
+
+Note that the “creator” item has to be a list-of-lists, because aspects
+other than name may also be included, and the second list is required to
+distinguish different creators, as described in detail in [the metadata
+vignette](https://docs.ropensci.org/deposits/articles/metadata.html). A
+new deposits client can be filled with this metadata by passing it as
+the `metadata` parameter:
+
+``` r
+
+cli <- depositsClient$new (
+    service = "zenodo",
+    sandbox = TRUE,
+    metadata = metadata
+)
+print (cli)
+#> <deposits client>
+#>  deposits service : zenodo
+#>            sandbox: TRUE
+#>          url_base : https://sandbox.zenodo.org/api/
+#>  Current deposits : <none>
+#>
+#>     hostdata : <none>
+#>     metadata : 3 terms (see 'metadata' element for details)
+```
+
+The summary produced by calling
+[`print()`](https://rdrr.io/r/base/print.html) (or, equivalently, just
+typing `cli` in the console) says that the object now includes three
+metadata terms. They can be seen by viewing `cli$metadata`, confirming
+that the client metadata are precisely what we specified:
+
+``` r
+
+cli$metadata
+```
+
+    #> $abstract
+    #> [1] "This is the abstract"
+    #> 
+    #> $creator
+    #> $creator[[1]]
+    #> $creator[[1]]$name
+    #> [1] "A. Person"
+    #> 
+    #> 
+    #> $creator[[2]]
+    #> $creator[[2]]$name
+    #> [1] "B. Person"
+    #> 
+    #> 
+    #> 
+    #> $title
+    #> [1] "New Title"
+
+Alternative ways of specifying and entering metadata are described in
+[the metadata
+vignette](https://docs.ropensci.org/deposits/articles/metadata.html),
+along with detailed descriptions of the kinds of metadata accepted by a
+deposits client.
+
+## Creating a new deposit
+
+Once filled with metadata, a deposits client can be used to initiate a
+new deposit on the associated external service with [the
+`$deposit_new()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-new-).
+The [`$deposit_new()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-new-)
+uses an existing client to create a new deposit on the nominated
+service, whereas the [the `$new()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-new-)
+method creates a new client. Calling `deposit_new()` from the client
+constructed above with our sample metadata gives the following result:
+
+``` r
+
+cli$deposit_new ()
+#> ID of new deposit: 1064327
+print (cli)
+#> <deposits client>
+#>  deposits service : zenodo
+#>            sandbox: TRUE
+#>          url_base : https://sandbox.zenodo.org/api/
+#>  Current deposits : 1 (see 'deposits' element for details)
+#>
+#>  url_deposit : https://sandbox.zenodo.org/deposit/1064327
+#>   deposit id : 1064327
+#>     hostdata : list with 14  elements
+#>     metadata : 4 terms (see 'metadata' element for details)
+```
+
+The client now lists one current deposit, additional fields for the URL
+and “id” of the deposit, and has a “hostdata” field with 14 elements.
+The “ID” value printed by the call to `deposit_new()` is listed in the
+client as its “deposit id”. This is a unique integer value used to
+identify particular deposits on external services. The value can be
+accessed any time as `cli$id`. The “metadata” item also includes an
+additional “identifier” element containing a pre-reserved DOI provided
+by the deposits service.
+
+From that point on, a client will always show (at least) one deposit.
+For example, if we return at some later time to a new R session and
+initiate a new, empty client, we would see the following result:
+
+``` r
+
+cli <- depositsClient$new (service = "zenodo", sandbox = TRUE)
+print (cli)
+#> <deposits client>
+#>  deposits service : zenodo
+#>            sandbox: TRUE
+#>          url_base : https://sandbox.zenodo.org/api/
+#>  Current deposits : 1 (see 'deposits' element for details)
+#>
+#>   hostdata : <none>
+#>   metadata : <none>
+```
+
+This differs from our initial client in that it now lists one “current
+deposit”.
+
+## Retrieving deposits
+
+We can examine a deposits client to get the “id” values of all current
+deposits. Extending from the previous example, the “id” can be accessed
+as:
+
+``` r
+
+cli$deposits$id
+#> [1] 1064327
+```
+
+More generally, information of all deposits currently associated with a
+user’s account (as identified by the token described in the
+[installation
+vignette](https://docs.ropensci.org/deposits/articles/install-setup.html#setup-api-tokens))
+can be accessed as `cli$deposits`. With the single deposit show in the
+previous steps, the first few fields of the result look this this:
+
+``` r
+
+cli$deposits [, 1:5]
+```
+
+    #>   conceptrecid             created                    doi
+    #> 1      1200932 2023-00-01T00:00:00 10.5072/zenodo.1064327
+    #>                                  doi_url      id
+    #> 1 https://doi.org/10.5072/zenodo.1064327 1064327
+
+We can retrieve the metadata from this or any previously uploaded
+deposit with the `deposit_retrieve()` function:
+
+``` r
+
+cli$deposit_retrieve (deposit_id = cli$deposits$id [1])
+```
+
+The local client then holds identical information to the previous client
+immediately after calling `deposit_new()` - that is,
+`retrieve_deposit()` has filled the local client with all of the
+metadata from the previously-created deposit.
+
+## Uploading files to deposits
+
+The previous sections of this document describe how to initiate a
+deposits client, and how to use that to initiate and retrieve metadata
+from a remote deposits services. The main point of a deposit is of
+course to store actual data in any arbitrary format alongside these
+structured metadata. This is achieved with [the `deposit_upload_file()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-depositsClient-deposit_upload_file),
+demonstrated in the following code which uses our deposit retrieved
+directly above. It is recommended to store all data for a single deposit
+within a single directory, which the following code also creates.
+
+``` r
+
+data_dir <- file.path (tempdir (), "data")
+dir.create (data_dir)
+path <- file.path (data_dir, "data.csv")
+write.csv (datasets::Orange, path, row.names = FALSE)
+cli$deposit_upload_file (path = path)
+#> frictionless metadata file has been generated as '/tmp/RtmpxSiYhW/data/datapackage.json'
+```
+
+The client then holds additional information which appears after typing
+`print(cli)`, or just `cli`:
+
+``` r
+
+print (cli)
+#> <deposits client>
+#>  deposits service : zenodo
+#>            sandbox: TRUE
+#>          url_base : https://sandbox.zenodo.org/api/
+#>  Current deposits : 1 (see 'deposits' element for details)
+#>
+#>  url_deposit : https://sandbox.zenodo.org/deposit/1064327
+#>   deposit id : 1064327
+#>     hostdata : list with 14  elements
+#>     metadata : 4 terms (see 'metadata' element for details)
+#>   local_path : /tmp/RtmpxSiYhW/data
+#>    resources : 1 local, 1 remote
+```
+
+The client now holds a `local_path` field identifying the directory of
+the active deposit, and lists numbers of both local and remote
+resources. The details of the remote resources are contained in the
+`hostdata$files` element (which was previously empty):
+
+``` r
+
+cli$hostdata$files
+#>                           checksum         filename filesize                                   id
+#> 1 cc624d72ede85ef061afa494d9951f6f         data.csv      625 56c44dd6-5f84-4212-9a65-d37f64ca886f
+#> 2 eaeb7c4f8a931c99e662172299a0b17f datapackage.json      812 32d556ef-5b65-4b9d-a8a8-2e7bed11da5d
+#>                                                                               links.download
+#> 1         https://sandbox.zenodo.org/api/files/561f4971-9e86-4235-b574-f5662f6088e3/data.csv
+#> 2 https://sandbox.zenodo.org/api/files/561f4971-9e86-4235-b574-f5662f6088e3/datapackage.json
+#>                                                                                              links.self
+#> 1 https://sandbox.zenodo.org/api/deposit/depositions/1161632/files/56c44dd6-5f84-4212-9a65-d37f64ca886f
+#> 2 https://sandbox.zenodo.org/api/deposit/depositions/1161632/files/32d556ef-5b65-4b9d-a8a8-2e7bed11da5d
+```
+
+The list of files includes a “datapackage.json” file generated by [the
+`frictionless` package](https://docs.ropensci.org/frictionless). This
+file is not counted in “resources”. As described in [the main
+README](https://docs.ropensci.org/deposits/index.html), and at length in
+[the separate “frictionless”
+vignette](https://docs.ropensci.org/deposits/articles/frictionless.html),
+the “datapackage.json” file contains both the metadata entered in to the
+deposits client, as well as “frictionless metadata” describing the
+internal properties of the dataset itself.
+
+Files can be downloaded with the [`deposit_download_file`
+function](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-download-file-).
+To demonstrate how that works, the following code first removes the
+local version, then downloads it from the remote service and confirms
+that a local version has been successfully re-created.
+
+``` r
+
+file.remove (path)
+file <- cli$deposit_download_file (filename = "data.csv", path = data_dir)
+file
+#> [1] /tmp/RtmpcO59N8/data/data.csv
+```
+
+### Pre-generating frictionless metadata files prior to upload
+
+The workflow described in the preceding section results in a
+frictionless metadata file being simultaneously generated, filled with
+deposits metadata, and uploaded to the nominated service. As described
+in detail in [the “frictionless”
+vignette](https://docs.ropensci.org/deposits/articles/frictionless.html).
+An alternative workflow allows frictionless metadata files to be
+generated locally prior to any uploading. This uses [the
+`deposits_add_resource()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-add-resource-),
+where a “resource” is a local data file or object.
+
+After initiating a client with metadata, as demonstrated above:
+
+``` r
+
+cli <- depositsClient$new (service = "zenodo", sandbox = TRUE, metadata = metadata)
+```
+
+A frictionless metadata file which is only stored locally can then be
+generated by the following call, by specifying a path to that local
+file.
+
+``` r
+
+cli$deposit_add_resource (path = path)
+```
+
+The client will then list an additional `local_path`, as demonstrated
+above, and in this case will list `resources: 1 local, 0 remote`,
+because the resource has not yet been uploaded to the remote service.
+The `local_path` directory containing the specified file will also have
+an additional “datapackage.json” file including the deposits metadata
+used in client construction. This file may be edited as desired prior to
+uploading. To update a deposits client with changes to external metadata
+files, simply pass the path to that file to [the
+`deposits_fill_metadata()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-fill-metadata-).
+When ready, a single call to [the `deposit_upload_file()`
+function](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-depositsClient-deposit_upload_file)
+will upload the file specified in that call, along with the frictionless
+“datapackage.json” metadata file.
+
+## Editing and updating deposits
+
+All deposits are initiated on the nominated services as “private”
+deposits, meaning:
+
+1.  They can only be viewed by the deposit owner; and
+2.  They can be freely edited, including complete deletion.
+
+A deposit can only be publicly viewed once it has been published, as
+described in the final section of this vignette. The process of using
+deposits to prepare one or more datasets for publication will generally
+involve multiple stages of editing and updating.
+
+Once a deposits client has been filled with metadata and connected to a
+`local_path`, as demonstrated above, any of the local files may be
+edited, including the frictionless “datapackage.json” file. The client
+and the deposit held on the remote server may then be updated by calling
+the [`deposit_update()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-update-).
+Any changes to the “metadata” field of the “datapackage.json” file will
+be reflected in the “metadata” field of the deposits client, as well as
+in the metadata passed to the remote service. Any modified files,
+including “datapackage.json”, will also be uploaded to the remote
+service, over-writing previous versions.
+
+Note that local files must first be individually uploaded with the the
+[`deposit_upload_file()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-depositsClient-deposit_upload_file)
+before the [`deposit_update()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-update-)
+can be used to update them. Moreover, calling
+[`deposit_update()`](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-update-)
+before all files held in the `local_path` directory have been uploaded
+will generally produce an error noting that all files must first be
+uploaded prior to calling
+[`deposit_update()`](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-update-).
+
+## Example workflow
+
+An example of a full workflow for creating and editing a deposits client
+and associated metadata would look something like the following five
+main steps:
+
+1.  Initiate local deposits client with metadata:
+
+    ``` r
+
+    metadata <- list (
+        title = "New Title",
+        abstract = "This is the abstract",
+        creator = list (list (name = "A. Person"), list (name = "B. Person"))
+    )
+    cli <- depositsClient$new (
+        service = "zenodo",
+        sandbox = TRUE,
+        metadata = metadata
+    )
+    cli$deposit_new ()
+    #> ID of new deposit: 1064327
+    ```
+
+2.  Upload local data, which the following code simulates by creating a
+    “dummy” dataset in the temporary directory of the current R session:
+
+    ``` r
+
+    data_dir <- file.path (tempdir (), "data")
+    dir.create (data_dir)
+    path <- file.path (data_dir, "data.csv")
+    write.csv (datasets::Orange, path, row.names = FALSE)
+    ```
+
+    The following call then uploads that dataset to the newly-created
+    deposit:
+
+    ``` r
+
+    cli$deposit_upload_file (path = path)
+    ```
+
+    Calling `deposit_upload_file()` the first time also creates local
+    and remote versions of a frictionless “datapackage.json” file,
+    holding all metadata, and the DOI of the new deposit. Uploading
+    files also automatically generates the `local_path` field in the
+    deposits client, enabling numbers of local and remote resources to
+    be counted and shown when printing the client.
+
+3.  Modify metadata. The following code provides a proof-of-principle
+    modification of metadata, by changing “New Title” to “Updated
+    Title”:
+
+    ``` r
+
+    fr <- file.path (data_dir, "datapackage.json")
+    dp <- frictionless::read_package (fr)
+    dp$metadata$title
+    #> [1] "New Title"
+    dp$metadata$title <- "Updated Title"
+    frictionless::write_package (dp, data_dir)
+    ```
+
+    This is an indirect way of editing metadata, by using R code. The
+    recommended way to update deposits metadata is to directly edit and
+    modify the “datapackage.json” file.
+
+4.  Update both local client and remote deposit data, noting that the
+    `local_path` variable is held in the client itself, so does not need
+    to be passed to the update method.
+
+    ``` r
+
+    cli$deposit_update ()
+    #> Local file at [/tmp/RtmpBM0VYr/data/data.csv] is identical on host and will not be uploaded.
+    #> Local file at [/tmp/RtmpBM0VYr/data/datapackage.json] has changed and will now be uploaded.
+    cli$metadata$title
+    #> [1] "Updated Title"
+    cli$hostdata$title
+    #> [1] "Updated Title"
+    ```
+
+    Local modifications are reflected in both updated “metadata” with
+    the deposits client, as well as in “hostdata” stored on the Zenodo
+    service.
+
+## Publishing a deposit
+
+Once all metadata and data have been satisfactorily edited, updated, and
+uploaded, a deposit can be made publicly visible and permanently
+associated with a Digital Object Identifier (DOI) by publishing it.
+Prior to publishing, it is often desired to apply an “embargo” to the
+deposit, in the form of a date after which the deposit will become
+publicly visible. The two steps to publication are thus generally:
+
+``` r
+
+cli$deposit_embargo (embargo_date = "2030-03-30")
+cli$deposit_publish ()
+```
+
+Calling [the `deposit_publish()`
+method](https://docs.ropensci.org/deposits/reference/depositsClient.html#method-deposit-publish-)
+is irreversible, and can never be undone. (Publication is permanent even
+in the Zenodo sandbox environment.) The published deposit will be
+permanently associated with the account of the user who published it, as
+identified by [the API token used to initiate the deposits
+client](https://docs.ropensci.org/deposits/articles/install-setup.html#setup-api-tokens).
+Publication will also change many items of the client’s “hostdata”,
+notably involving a change of status or visibility from “private” to
+“public”. Once a deposit has been published, the associated DOI, or
+equivalent the URL given in the deposits client, may be shared as a
+permanent link to the deposit.
